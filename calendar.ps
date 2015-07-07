@@ -1,0 +1,396 @@
+%!PS
+% Author: Zac Levinson
+% Date: June 6, 2015
+%
+% Description:
+% Creates an international fixed calendar with 8x8 inch pages. Gregorian dates
+% are displayed on the bottoms of each box. This file was designed for a 2016
+% calendar, so the 1st is on a Friday. There is no easy way to change this at
+% the moment, but everything else is very general. There is a boolean variable
+% to control whether or not this is a leap year.
+%
+% Holidays and art are defined at the very bottom of the file. There are two
+% functions available. One will print a proof of the spreads, and the other
+% will print an imposition for binding.
+%
+% Usage:
+% gs -o calendar.pdf -dEmbedAllFonts=true -sDEVICE=pdfwrite calendar.ps
+
+(Fonts/LemonMilk/LemonMilk.pfa) run
+(Fonts/Petita/PetitaLight.pfa) run
+(Fonts/Petita/PetitaMedium.pfa) run
+(Fonts/Petita/PetitaBold.pfa) run
+
+/inch {72 mul} def
+/hcenter {dup stringwidth pop 2 div neg} def
+<</PageSize [8 inch 16 inch]>> setpagedevice
+
+/leap_yr true def
+/margin_w 0.5 inch def
+/colwidth 1 inch def
+/day_labels [(Sunday) (Monday) (Tuesday) (Wednesday) (Thursday) (Friday) (Saturday)] def
+
+/concatstrings % (a) (b) -> (ab)  
+   { exch dup length    
+     2 index length add string    
+     dup dup 4 2 roll copy length
+     4 -1 roll putinterval
+   } bind def 
+
+/gregdate
+    {% Determine the date on the Gregorian calendar given the
+     % number of days past Jan. 1   
+        /day_annum exch def
+
+        % Define arrays for abbreviated month names, month lengths
+        % and cummulative day counts. The day counts need to be adjusted
+        % if it is a leap year
+        /month_names [(Jan.) (Feb.) (Mar.) (Apr.)
+                      (May)  (Jun.) (Jul.) (Aug.)
+                      (Sep.) (Oct.) (Nov.) (Dec.)] def
+        
+        /month_lengths [31 28 31 30 31 30 31 31 30 31 30 31] def
+        /month_cummu [31 59 90 120 151 181 212 243 273 304 334 365] def
+
+        leap_yr{
+            /month_lengths [31 29 31 30 31 30 31 31 30 31 30 31] def
+            /month_cummu [31 60 91 121 152 182 213 244 274 305 335 366] def
+        } if
+
+        % Determine which month the date is in by subtracting the
+        % cummulative day counts until we get a number less than one
+        0 1 month_cummu length 1 sub{
+            /i exch def
+
+            day_annum month_cummu i get sub 1 lt {
+                day_annum month_cummu i get sub
+                exit
+            } if
+        } for
+        
+        % Determine which day in the month we are in, and create
+        % the string to put on the stack
+        /daynum exch month_lengths i get add def
+        month_names i get ( ) concatstrings
+        daynum 2 string cvs concatstrings
+    } def
+
+/drawcalbox % Draws the box for a single day
+    {
+        /holiday exch def
+        /gregday exch def
+        /day exch def
+        /cy exch def
+        /cx exch def
+
+        % Draw a 1 inch line on the bottom of each day about
+        % the specified center. Days less than 8 have nothing
+        % above them, so they need top bars too.
+        3 setlinewidth
+        newpath
+            cx cy moveto 0.5 inch neg 0.5 inch neg rmoveto
+            colwidth 0 rlineto
+
+            day 8 lt{
+                0 1 inch rmoveto
+                colwidth neg 0 rlineto
+            } if
+        stroke
+
+        % Set font parameters for big number
+        /LemonMilk findfont
+        /numsize 38 def
+        numsize scalefont
+        setfont
+        0.75 setgray
+
+        % Move to the center of the box, convert the number
+        % to a string and offset the pen to center the text
+        cx cy moveto
+        day 2 string cvs 
+        hcenter numsize 4 div neg rmoveto show
+
+        % Set font for Gregorian calendar date
+        /PetitaLight findfont
+        12 scalefont
+        setfont
+        0 setgray
+
+        % Move to the bottom of the box + 8pts and center
+        % the Gregorian text horizontally
+        cx cy moveto
+        0 0.5 inch neg 8 add rmoveto
+        gregday hcenter 0 rmoveto show
+
+        % Set font for holiday label
+        /PetitaMedium findfont
+        10 scalefont
+        setfont
+        0 setgray
+
+        % Move to the top of the box - 12pts and center
+        % the holiday text horizontally
+        cx cy moveto
+        0 0.5 inch 12 sub rmoveto
+        holiday hcenter 0 rmoveto show
+
+    } def
+
+/draw_calpage
+    {
+        /colors exch def
+        /holiday_list exch def
+        /image_path exch def
+        /month exch def
+
+        /month_names [(January) (February)  (March) (April)
+                      (May)     (June)  (Sol)   (July)  (August)
+                      (September) (October) (November) (December)
+                     ] def
+
+        % Add image to page. We need to shift the origin up
+        % 8 inches, then back down. Also, the EPS file may
+        % have a showpage command in it, so we temporarily
+        % disable that command by making a copy of the local
+        % VM, chaning the command, then restoring the VM
+        0 8 inch translate
+        save
+          /showpage {} bind def
+          image_path run
+        restore
+        0 8 inch neg translate
+
+        % Set font for month headers and display month
+        /LemonMilk findfont
+        48 scalefont
+        setfont
+        margin_w 6 inch moveto
+        month show
+
+        % Set font for day headers
+        /PetitaBold findfont
+        12 scalefont
+        setfont
+
+        % Create day label array and loop over it to add headers to the page
+        /num_days 7 def
+        0 1 num_days 1 sub
+        {/daynum exch def
+            % Move to the center of the first box, then offset to the correct column
+            0.5 inch colwidth 2 div add 7 inch moveto
+            daynum inch 0 rmoveto
+
+            % Center the text within the column
+            day_labels daynum get
+            hcenter 0 rmoveto show
+        } for
+
+        % Determine which month this is for
+        0 1 month_names length 1 sub{
+            /month_ind exch def
+            month month_names month_ind get eq{ exit } if
+        } for
+
+        % Loop over a 5x7 grid of days
+        /num_weeks 5 def
+        0 1 num_weeks 1 sub
+        { /weeknum exch def
+            0 1 num_days 1 sub
+            { /daynum exch def
+                % Locate the center of each box and determine the day
+                % number within the month. The day number is offset so that
+                % the month starts on a Friday
+                % /cx 0 inch margin_w add colwidth 2 div add daynum inch add def
+                /cx margin_w colwidth 2 div add daynum inch add def
+                /cy 6.25 inch weeknum inch sub def
+                /date weeknum num_days mul daynum add 4 sub def
+
+                % Initialize the holiday string to an empty string
+                % then loop over all of the holidays for the month
+                % and check if one of them is on the current day
+                /holiday_str () def
+                0 1 holiday_list length 1 sub
+                { /hnum exch def
+                    /holiday holiday_list hnum get def
+                    holiday 0 get date eq
+                    {
+                        /holiday_str holiday 1 get def
+                    } if
+                } for
+
+                % Determine how many days past Jan. 1 this day is
+                /day_annum month_ind 28 mul date add def
+
+                % Draw the box for the current day. Our loop extends over
+                % too many days, so we just need to make sure we're on a
+                % valid day before we draw it. December has 29 days, so we
+                % need to check for that too. In leap years we need to add
+                % a 30th day to December.
+                date 0 gt date 29 lt and
+                month (December) eq date 29 eq and or
+                month (December) eq date 30 eq and leap_yr and or {
+                    cx cy date
+                    day_annum gregdate
+                    holiday_str
+                    drawcalbox
+                } if
+            } for
+        } for
+
+        colors length 0 eq not{
+            /patch_width 7 colors length div inch def
+            0 1 colors length 1 sub{
+                /i exch def
+                /color colors i get def
+                color 0 get color 1 get color 2 get color 3 get setcmykcolor
+                margin_w i patch_width mul add 50 patch_width 20 rectfill
+
+                0 0 0 setrgbcolor
+                margin_w i patch_width mul add 50 patch_width 20 rectstroke
+            } for
+        } if
+        
+    showpage
+    } def
+
+% Define holidays
+/holidays [ 
+    [ % January
+        [1 (New Year's Day)]
+        [18 (Martin Luther King Day)]
+    ][ % February
+        [5 (Groundhog Day)]
+        [12 (Mardi Gras)]
+        [17 (Valentine's Day)]
+        [18 (President's Day)]
+    ][ % March
+        [4 (Leap Day)]
+        [11 (Guam Discovery Day)]
+        [17 (Daylight Savings begins)]
+        [21 (St. Patrick's Day)]
+        [24 (Spring Equinox)]
+    ][ % April
+        [1 (Good Friday)]
+        [3 (Easter)]
+        [8 (Fool's Day)]
+    ][ % May
+        [16 (Edwin Land Birthday)]
+        [17 (Mother's Day)]
+    ][ % June
+        [11 (Memorial Day)]
+        [15 (National Donut Day)]
+        [26 (Flag Day)]
+    ][ % Sol
+        [3 (Father's Day)]
+        [4 (Summer Solstice)]
+        [18 (Independence Day)]
+        [26 (G. Eastman Birthday)]
+    ][ % July
+        [2 (Apollo 11 Launch)]
+        [6 (Apollo 11 lands on Moon)]
+        [10 (Apollo 11 return to Earth)]
+    ][ % August
+        [8 (National Aviation Day)]
+        [15 (W. Destler Birthday)]
+        [25 (Labor Day)]
+    ][ % September
+        [8 (Constitution Day)]
+        [14 (Autumnal Equinox)]
+    ][ % October
+        [3 (Leif Erikson Day)]
+        [4 (Columbus Day)]
+        [25 (Halloween)]
+    ][ % November
+        [3 (Daylight Savings ends)]
+        [8 (Veteran's Day)]
+        [21 (Thanksgiving)]
+    ][ % December
+        [2 (M. Cotsworth Birthday)]
+        [16 (Pan Am. Aviation Day)]
+        [20 (Winter Solstice)]
+        [24 (Christmas Day)]
+        [30 (Year Day)]
+    ]
+] def
+
+/cover_path (images/cover.eps) def
+
+/image_paths [
+    (images/hamburgerCurlingStone.eps)  % January
+    (images/vladamirValentines.eps)     % February
+    (images/kiteShoe.eps)               % March
+    (images/miataDinosaur.eps)          % April
+    (images/rocketBurger.eps)           % May
+    (images/coleOnesie.eps)             % June
+    (images/kodakTower.eps)             % Sol
+    (images/trexMeat.eps)               % July
+    (images/goldenUnicorn.eps)          % August
+    (images/astronautNetflix.eps)       % September
+    (images/halloweenDino.eps)          % October
+    (images/turkeyMan.eps)              % November
+    (images/christmasGoose.eps)         % December
+] def
+
+/color_list [
+[[0.07 0.18 0.72 0.00] [0.13 0.92 0.84 0.00] [0.25 0.00 1.00 0.08] [0.38 0.73 0.65 0.48]]   % January
+[[0.00 0.14 1.00 0.00] [0.45 0.84 0.37 0.40] [0.00 0.19 0.27 0.00] [0.00 0.62 0.28 0.00]]   % February
+[[0.03 0.85 0.89 0.00] [0.55 0.65 0.00 0.00] [1.00 0.65 0.00 0.00]]                         % March
+[[0.02 0.11 0.50 0.00] [0.36 0.24 1.00 0.00] [1.00 0.39 0.00 0.00] [0.00 0.00 0.00 0.86]]   % April
+[[0.00 0.60 0.55 0.00] [0.90 0.14 0.29 0.32] [0.00 0.00 1.00 0.00] [0.27 0.88 0.77 0.28]]   % May
+[[0.00 0.31 0.68 0.00] [1.00 0.50 0.50 0.40] [0.18 0.00 0.22 0.00]]                         % June
+[[1.00 0.80 0.00 0.00] [0.00 0.17 0.65 0.00] [0.00 1.00 0.97 0.00] [0.37 0.10 0.26 0.00]]   % Sol
+[[0.10 0.10 0.40 0.00] [0.00 0.00 0.00 0.00] [0.16 0.61 0.43 0.04]]                         % July
+[[0.00 0.70 0.60 0.10] [0.00 0.20 1.00 0.10] [0.40 0.10 0.05 0.10] [0.00 0.00 0.10 0.10]] % August
+[[0.00 0.90 0.90 0.00] [0.00 0.00 0.00 0.20] [0.00 0.00 0.00 0.00] [0.00 0.19 0.19 0.18]]   % September
+[[0.00 0.50 1.00 0.00] [0.00 0.00 0.00 0.00] [1.00 0.00 0.60 0.00] [0.40 0.45 0.66 0.00]]   % October
+[[0.23 0.47 0.53 0.20] [0.12 0.92 1.00 0.00] [0.15 0.40 1.00 0.00] [0.85 0.87 1.00 0.00]] % November
+[[1.00 0.00 1.00 0.00] [0.17 1.00 1.00 0.00] [0.55 0.40 0.00 0.47] [0.00 0.20 0.70 0.05]] % December
+] def
+
+% Create calendar pages
+/calendar_proof{
+    save
+          /showpage {} bind def
+          cover_path run
+    restore
+    showpage
+
+    (January) image_paths 0 get holidays 0 get color_list 0 get draw_calpage
+    (February) image_paths 1 get holidays 1 get color_list 1 get draw_calpage
+    (March) image_paths 2 get holidays 2 get color_list 2 get draw_calpage
+    (April) image_paths 3 get holidays 3 get color_list 3 get draw_calpage
+    (May) image_paths 4 get holidays 4 get color_list 4 get draw_calpage
+    (June) image_paths 5 get holidays 5 get color_list 5 get draw_calpage
+    (Sol) image_paths 6 get holidays 6 get color_list 6 get draw_calpage
+    (July) image_paths 7 get holidays 7 get color_list 7 get draw_calpage
+    (August) image_paths 8 get holidays 8 get color_list 8 get draw_calpage
+    (September) image_paths 9 get holidays 9 get color_list 9 get draw_calpage
+    (October) image_paths 10 get holidays 10 get color_list 10 get draw_calpage
+    (November) image_paths 11 get holidays 11 get color_list 11 get draw_calpage
+    (December) image_paths 12 get holidays 12 get color_list 12 get draw_calpage
+} def
+
+/imposition{
+    save
+          /showpage {} bind def
+          cover_path run
+    restore
+    showpage
+
+    (December) image_paths 0 get holidays 12 get color_list 12 get draw_calpage
+    (January) image_paths 12 get holidays 0 get color_list 0 get draw_calpage
+    (November) image_paths 1 get holidays 11 get color_list 11 get draw_calpage
+    (February) image_paths 11 get holidays 1 get color_list 1 get draw_calpage
+    (October) image_paths 2 get holidays 10 get color_list 10 get draw_calpage
+    (March) image_paths 10 get holidays 2 get color_list 2 get draw_calpage
+    (September) image_paths 3 get holidays 9 get color_list 9 get draw_calpage
+    (April) image_paths 9 get holidays 3 get color_list 3 get draw_calpage
+    (August) image_paths 4 get holidays 8 get color_list 8 get draw_calpage
+    (May) image_paths 8 get holidays 4 get color_list 4 get draw_calpage
+    (July) image_paths 5 get holidays 7 get color_list 7 get draw_calpage
+    (June) image_paths 7 get holidays 5 get color_list 5 get draw_calpage
+    (Sol) image_paths 6 get holidays 6 get color_list 6 get draw_calpage
+} def
+
+calendar_proof
+%imposition
